@@ -1,0 +1,120 @@
+
+// Developer: Forex Robot Easy Team
+// Website: forexroboteasy.com
+
+#property strict
+
+// Define constants
+#define ORDER_BLOCK_SIZE 10 // Minimum number of bars for an order block
+#define ALERT_THRESHOLD 3 // Number of consecutive bars required for an alert
+
+// Define input parameters
+input ENUM_SYMBOL_INFO_STRING SymbolInfoString = SYMBOL_CURRENCY_BASE; // Symbol info string
+input ENUM_SYMBOL_INFO_INTEGER SymbolInfoInteger = SYMBOL_VOLUME_STEP; // Symbol info integer
+input ENUM_TIMEFRAMES Timeframe = PERIOD_H1; // Timeframe to analyze
+input int BarsToAnalyze = 100; // Number of bars to analyze
+
+// Define global variables
+int g_totalBars; // Total number of bars on the chart
+datetime g_lastAlertTime; // Time of the last alert
+
+// Define structures
+struct OrderBlock {
+   datetime start; // Start time of the order block
+   datetime end; // End time of the order block
+   double high; // Highest price in the block
+   double low; // Lowest price in the block
+}
+
+// Define function prototypes
+void DetectOrderBlocks();
+bool IsBullishOrderBlock(const OrderBlock& orderBlock);
+bool IsBearishOrderBlock(const OrderBlock& orderBlock);
+void SendAlert(const string& message);
+
+// Entry point of the program
+void OnStart()
+{
+   // Initialize global variables
+   g_totalBars = Bars;
+   g_lastAlertTime = 0;
+
+   // Detect order blocks
+   DetectOrderBlocks();
+}
+
+// Function to detect order blocks
+void DetectOrderBlocks()
+{
+   // Array to store order blocks
+   OrderBlock[] orderBlocks;
+
+   // Loop through the bars
+   for (int i = Bars - BarsToAnalyze; i < Bars; i++)
+   {
+      // Create a new order block
+      OrderBlock newOrderBlock;
+      newOrderBlock.start = Time[i];
+      newOrderBlock.high = High[i];
+      newOrderBlock.low = Low[i];
+
+      // Check if the current bar is forming an order block
+      if (i > 0 && i < Bars - 1)
+      {
+         if (High[i] > High[i-1] && High[i] > High[i+1] && Low[i] > Low[i-1] && Low[i] > Low[i+1])
+         {
+            // Extend the order block to the previous bar
+            newOrderBlock.start = Time[i-1];
+            newOrderBlock.high = MathMax(newOrderBlock.high, High[i-1]);
+            newOrderBlock.low = MathMin(newOrderBlock.low, Low[i-1]);
+         }
+      }
+
+      // Check if the order block is complete
+      if (i == Bars - 1 || (High[i+1] < High[i] && Low[i+1] < Low[i]))
+      {
+         newOrderBlock.end = Time[i];
+         orderBlocks.push_back(newOrderBlock);
+      }
+   }
+
+   // Loop through the order blocks
+   for (int j = 0; j < orderBlocks.size(); j++)
+   {
+      if (IsBullishOrderBlock(orderBlocks[j]))
+      {
+         SendAlert('Bullish order block detected');
+      }
+      
+      if (IsBearishOrderBlock(orderBlocks[j]))
+      {
+         SendAlert('Bearish order block detected');
+      }
+   }
+}
+
+// Function to check if an order block is bullish
+bool IsBullishOrderBlock(const OrderBlock& orderBlock)
+{
+   return orderBlock.high - orderBlock.low >= ORDER_BLOCK_SIZE * SymbolInfoDouble(Symbol(), SymbolInfoInteger);
+}
+
+// Function to check if an order block is bearish
+bool IsBearishOrderBlock(const OrderBlock& orderBlock)
+{
+   return orderBlock.low - orderBlock.high >= ORDER_BLOCK_SIZE * SymbolInfoDouble(Symbol(), SymbolInfoInteger);
+}
+
+// Function to send an alert
+void SendAlert(const string& message)
+{
+   // Check if enough time has passed since the last alert
+   if (TimeCurrent() - g_lastAlertTime >= ALERT_THRESHOLD * PeriodSeconds(Timeframe))
+   {
+      // Send the alert
+      Alert(message);
+      
+      // Update the last alert time
+      g_lastAlertTime = TimeCurrent();
+   }
+}
